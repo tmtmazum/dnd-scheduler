@@ -1,12 +1,21 @@
 import os
+import hashlib
+import hmac
+import secrets
 from calendar import monthrange
 from datetime import date, datetime, timedelta, timezone
+from functools import wraps
 
 import boto3
-from flask import Flask, flash, g, redirect, render_template, request, send_from_directory, url_for
+import click
+from flask import Flask, flash, g, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "local-development-key-change-me")
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get("SESSION_COOKIE_SECURE", "false").lower() == "true"
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=12)
 app.config["DYNAMODB_TABLE"] = os.environ.get(
     "DYNAMODB_TABLE", "quest-weekend-availability"
 )
@@ -22,6 +31,61 @@ TIMES = (
     ("evening", "Evening", "5:00–9:00 PM"),
 )
 SESSION_META_KEY = "__quest_weekend_meta__"
+PARTY_PASSWORD_KEY = "__quest_weekend_party_password__"
+PASSWORD_HASH_ITERATIONS = 600_000
+
+
+def party_login_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not session.get("party_authenticated"):
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Party password required."}), 401
+            return redirect(url_for("login"))
+        return view(*args, **kwargs)
+
+    return wrapped
+
+
+def hash_party_password(password, salt=None):
+    salt = salt or secrets.token_bytes(16)
+    password_hash = hashlib.pbkdf2_hmac(
+        "sha256", password.encode("utf-8"), salt, PASSWORD_HASH_ITERATIONS
+    )
+    return {
+        "password_salt": salt.hex(),
+        "password_hash": password_hash.hex(),
+        "password_iterations": PASSWORD_HASH_ITERATIONS,
+    }
+
+
+def verify_party_password(password, password_record):
+    try:
+        salt = bytes.fromhex(password_record["password_salt"])
+        expected = bytes.fromhex(password_record["password_hash"])
+        iterations = int(password_record["password_iterations"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+    return hmac.compare_digest(actual, expected)
+
+
+@app.cli.command("set-party-password")
+def set_party_password_command():
+    """Set or replace the party password stored in DynamoDB."""
+    password = click.prompt("New party password", hide_input=True, confirmation_prompt=True)
+    if len(password) < 12:
+        raise click.ClickException("Use a password or passphrase with at least 12 characters.")
+    with app.app_context():
+        get_table().put_item(
+            Item={
+                "name_key": PARTY_PASSWORD_KEY,
+                "record_type": "party_password",
+                **hash_party_password(password),
+                "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            }
+        )
+    click.echo("Party password saved to DynamoDB as a salted PBKDF2 hash.")
 
 
 def add_two_months(start):
@@ -86,7 +150,7 @@ def load_participants():
 
     participants = []
     for item in items:
-        if item.get("name_key") == SESSION_META_KEY:
+        if item.get("name_key") in {SESSION_META_KEY, PARTY_PASSWORD_KEY}:
             continue
         slots = [
             {"date": slot["date"], "period": slot["period"]}
@@ -112,6 +176,7 @@ def load_confirmed_session():
 
 
 @app.get("/")
+@party_login_required
 def index():
     participants = load_participants()
     weekends = get_weekends()
@@ -150,7 +215,39 @@ def index():
     )
 
 
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    password_record = None
+    if request.method == "POST":
+        password_record = get_table().get_item(
+            Key={"name_key": PARTY_PASSWORD_KEY}
+        ).get("Item")
+        if password_record and verify_party_password(
+            request.form.get("password", ""), password_record
+        ):
+            session.clear()
+            session["party_authenticated"] = True
+            session.permanent = True
+            return redirect(url_for("index"))
+        if password_record:
+            flash("That party password didn’t match. Try again.", "error")
+        else:
+            flash(
+                "The party password has not been set yet. The organizer must run the setup command.",
+                "error",
+            )
+    return render_template("login.html")
+
+
+@app.post("/logout")
+@party_login_required
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+
 @app.post("/ready")
+@party_login_required
 def ready():
     name = request.form.get("name", "").strip()
     allowed_dates = {
@@ -171,7 +268,7 @@ def ready():
         flash("Names must be 60 characters or fewer.", "error")
         return redirect(url_for("index"))
     name_key = name.casefold()
-    if name_key == SESSION_META_KEY:
+    if name_key in {SESSION_META_KEY, PARTY_PASSWORD_KEY}:
         flash("That name is reserved for the party board. Choose another name.", "error")
         return redirect(url_for("index"))
     if not selected_slots:
@@ -196,6 +293,7 @@ def ready():
 
 
 @app.post("/session/confirm")
+@party_login_required
 def confirm_session():
     session_date = request.form.get("session_date", "")
     period = request.form.get("period", "")
@@ -219,6 +317,7 @@ def confirm_session():
 
 
 @app.post("/session/clear")
+@party_login_required
 def clear_confirmed_session():
     get_table().delete_item(Key={"name_key": SESSION_META_KEY})
     flash("The planned session has been cleared.", "success")
@@ -226,6 +325,7 @@ def clear_confirmed_session():
 
 
 @app.post("/availability/reset")
+@party_login_required
 def reset_availability():
     table = get_table()
     items = []
@@ -240,7 +340,7 @@ def reset_availability():
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     for item in items:
         name_key = item.get("name_key")
-        if not name_key or name_key == SESSION_META_KEY:
+        if not name_key or name_key in {SESSION_META_KEY, PARTY_PASSWORD_KEY}:
             continue
         table.put_item(
             Item={
@@ -254,7 +354,36 @@ def reset_availability():
     return redirect(url_for("index"))
 
 
+@app.post("/party-member/delete")
+@party_login_required
+def delete_party_member():
+    name = request.form.get("name", "").strip()
+    if not name or len(name) > 60:
+        flash("Choose a valid party member to delete.", "error")
+        return redirect(url_for("index"))
+    name_key = name.casefold()
+    if name_key in {SESSION_META_KEY, PARTY_PASSWORD_KEY}:
+        flash("That record cannot be deleted as a party member.", "error")
+        return redirect(url_for("index"))
+
+    table = get_table()
+    result = table.delete_item(
+        Key={"name_key": name_key},
+        ConditionExpression="attribute_exists(name_key)",
+        ReturnValues="ALL_OLD",
+    )
+    deleted_item = result.get("Attributes")
+    if not deleted_item:
+        flash("That party member could not be found.", "error")
+        return redirect(url_for("index"))
+
+    deleted_name = deleted_item.get("display_name", name)
+    flash(f"{deleted_name} and their availability have been removed from the party.", "success")
+    return redirect(url_for("index"))
+
+
 @app.get("/api/availability")
+@party_login_required
 def availability_api():
     participants = load_participants()
     return app.json.response(

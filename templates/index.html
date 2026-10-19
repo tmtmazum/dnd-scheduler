@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#17100f">
-  <title>Quest Weekend — Dragon's Den Party Board</title>
+  <title>Trainwreck — Party Board</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -22,6 +22,9 @@
         <span>QUEST<span class="brand-light">WEEKEND</span></span>
       </a>
       <span class="campaign-tag"><span class="live-dot"></span> THE DRAGON'S DEN</span>
+      <form class="logout-form" action="{{ url_for('logout') }}" method="post">
+        <button class="quiet-button" type="submit">Lock the board</button>
+      </form>
     </header>
 
     <main>
@@ -72,15 +75,47 @@
         {% endif %}
       {% endwith %}
 
+      <section class="roster-section" aria-labelledby="roster-title">
+        <div class="roster-heading">
+          <div><p class="section-kicker">ROLL CALL</p><h2 id="roster-title">The adventurers <span class="roster-count" id="roster-count">{{ total_participants }}</span></h2></div>
+          <span class="roster-caption">YOUR PARTY, SO FAR</span>
+        </div>
+        <div class="roster-grid" id="roster-grid">
+          {% for participant in participants %}
+            <article class="roster-card" data-name="{{ participant.name }}" data-slots="{{ participant.slots|tojson|forceescape }}">
+              <span class="roster-avatar">{{ participant.name[:1]|upper }}</span>
+              <div class="roster-info"><h3>{{ participant.name }}</h3><p>{{ participant.slots|length }} time{% if participant.slots|length != 1 %}s{% endif %} available</p></div>
+              <div class="roster-tags">
+                {% for slot in participant.slots %}<span>{{ slot_names[slot.date ~ '|' ~ slot.period] }}</span>{% endfor %}
+              </div>
+              <div class="roster-actions">
+                <button class="edit-adventurer-button" type="button" aria-label="Edit {{ participant.name }} availability">Edit</button>
+                <form action="{{ url_for('ready') }}" method="post" onsubmit="return confirm('Clear this adventurer’s availability?')">
+                  <input type="hidden" name="name" value="{{ participant.name }}">
+                  <button class="clear-adventurer-button" type="submit">Clear</button>
+                </form>
+                <form action="{{ url_for('delete_party_member') }}" method="post" onsubmit="return confirm('Permanently delete this party member and all their availability?')">
+                  <input type="hidden" name="name" value="{{ participant.name }}">
+                  <button class="delete-adventurer-button" type="submit">Delete Party Member</button>
+                </form>
+              </div>
+            </article>
+          {% else %}
+            <div class="empty-roster" id="empty-roster"><span aria-hidden="true">✧</span><p>The table is waiting for its first adventurer.</p><small>Be the first to add your availability above.</small></div>
+          {% endfor %}
+        </div>
+      </section>
+
       <section class="content-grid">
-        <section class="panel signup-panel" aria-labelledby="availability-title">
-          <div class="panel-heading">
+        <details class="panel responsive-panel signup-panel" id="signup-panel" open>
+          <summary class="panel-heading">
             <div>
               <p class="section-kicker">YOUR TURN</p>
               <h2 id="availability-title">Set your availability</h2>
             </div>
             <span class="step-badge">01 <span>/ 01</span></span>
-          </div>
+          </summary>
+          <div class="disclosure-content">
           <form action="{{ url_for('ready') }}" method="post">
             <label class="field-label" for="name">Adventurer name</label>
             <input class="name-input" type="text" id="name" name="name" list="saved-names" maxlength="60" placeholder="Choose a saved name or enter a new one" autocomplete="name" aria-describedby="name-hint" required>
@@ -117,16 +152,18 @@
             <button class="ready-button" id="save-availability-button" type="submit"><span id="save-availability-label">Mark me ready</span><span class="button-arrow" aria-hidden="true">↗</span></button>
             <p class="form-footnote"><span aria-hidden="true">⌁</span> You can submit again anytime to update your choices.</p>
           </form>
-        </section>
+          </div>
+        </details>
 
-        <section class="panel board-panel" aria-labelledby="board-title">
-          <div class="panel-heading board-heading">
+        <details class="panel responsive-panel board-panel" id="board-panel" open>
+          <summary class="panel-heading board-heading">
             <div>
               <p class="section-kicker">THE PARTY BOARD</p>
               <h2 id="board-title">Availability</h2>
             </div>
             <span class="member-count"><span id="member-count">{{ total_participants }}</span> <span id="member-label">{% if total_participants == 1 %}HERO{% else %}HEROES{% endif %}</span></span>
-          </div>
+          </summary>
+          <div class="disclosure-content">
           <p class="board-subtitle">A shared look at when everyone’s free. DM tools: confirm a slot or reset the board.</p>
           <div class="availability-board" id="availability-board" aria-live="polite">
             {% for weekend in weekends %}
@@ -167,29 +204,10 @@
           <form class="reset-form" action="{{ url_for('reset_availability') }}" method="post" onsubmit="return confirm('Clear every adventurer’s availability selection? Saved names will remain.')">
             <button class="quiet-button" type="submit">Reset all availability</button>
           </form>
-        </section>
+          </div>
+        </details>
       </section>
 
-      <section class="roster-section" aria-labelledby="roster-title">
-        <div class="roster-heading">
-          <div><p class="section-kicker">ROLL CALL</p><h2 id="roster-title">The adventurers <span class="roster-count" id="roster-count">{{ total_participants }}</span></h2></div>
-          <span class="roster-caption">YOUR PARTY, SO FAR</span>
-        </div>
-        <div class="roster-grid" id="roster-grid">
-          {% for participant in participants %}
-            <article class="roster-card" role="button" tabindex="0" aria-label="Edit {{ participant.name }} availability" data-name="{{ participant.name }}" data-slots="{{ participant.slots|tojson|forceescape }}">
-              <span class="roster-avatar">{{ participant.name[:1]|upper }}</span>
-              <div class="roster-info"><h3>{{ participant.name }}</h3><p>{{ participant.slots|length }} time{% if participant.slots|length != 1 %}s{% endif %} available</p></div>
-              <div class="roster-tags">
-                {% for slot in participant.slots %}<span>{{ slot_names[slot.date ~ '|' ~ slot.period] }}</span>{% endfor %}
-              </div>
-              <span class="edit-adventurer-button" aria-hidden="true">Edit</span>
-            </article>
-          {% else %}
-            <div class="empty-roster" id="empty-roster"><span aria-hidden="true">✧</span><p>The table is waiting for its first adventurer.</p><small>Be the first to add your availability above.</small></div>
-          {% endfor %}
-        </div>
-      </section>
     </main>
 
     <footer><span>QUEST WEEKEND</span><span>May your schedules align.</span><span class="footer-spark">✦</span></footer>
@@ -205,6 +223,7 @@
       const savedNames = document.getElementById('saved-names');
       const nameInput = document.getElementById('name');
       const saveLabel = document.getElementById('save-availability-label');
+      const savedNameSet = new Set([...savedNames.options].map(option => option.value.toLocaleLowerCase()));
       const reminder = document.getElementById('session-reminder');
       const reminderIcon = document.getElementById('reminder-icon');
       const reminderTitle = document.getElementById('reminder-title');
@@ -238,16 +257,36 @@
           input.checked = selected.has(input.value);
         });
         saveLabel.textContent = 'Save availability';
+        document.getElementById('signup-panel').open = true;
         nameInput.focus();
         document.querySelector('.signup-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
 
+      function clearSelectionsForNewName() {
+        const typedName = nameInput.value.trim().toLocaleLowerCase();
+        if (savedNameSet.has(typedName)) return;
+        document.querySelectorAll('input[name="availability"]').forEach(input => {
+          input.checked = false;
+        });
+        saveLabel.textContent = 'Mark me ready';
+      }
+
+      nameInput.addEventListener('input', clearSelectionsForNewName);
+      nameInput.addEventListener('change', clearSelectionsForNewName);
+
       roster.addEventListener('click', event => {
-        const card = event.target.closest('.roster-card[data-name]');
+        if (event.target.closest('.roster-actions form, .clear-adventurer-button, .delete-adventurer-button')) {
+          event.stopPropagation();
+          return;
+        }
+        const editButton = event.target.closest('.edit-adventurer-button');
+        const card = editButton ? editButton.closest('.roster-card[data-name]') : event.target.closest('.roster-card[data-name]');
         if (card) editAdventurer(card);
       });
       roster.addEventListener('keydown', event => {
-        const card = event.target.closest('.roster-card[data-name]');
+        if (event.target.closest('button, form, input')) return;
+        const editButton = event.target.closest('.edit-adventurer-button');
+        const card = editButton ? editButton.closest('.roster-card[data-name]') : event.target.closest('.roster-card[data-name]');
         if (card && (event.key === 'Enter' || event.key === ' ')) {
           event.preventDefault();
           editAdventurer(card);
@@ -264,16 +303,22 @@
           count.textContent = people.length;
           rosterCount.textContent = people.length;
           label.textContent = people.length === 1 ? 'HERO' : 'HEROES';
+          savedNameSet.clear();
+          people.forEach(person => savedNameSet.add(person.name.toLocaleLowerCase()));
           savedNames.innerHTML = [...new Set(people.map(person => person.name))].map(name => `<option value="${escapeHtml(name)}"></option>`).join('');
           board.innerHTML = weekends.map(weekend => `<section class="weekend-board"><h3 class="weekend-board-title">Weekend of ${escapeHtml(weekend.days[0].date_label.split(', ').slice(1).join(', '))}</h3>${weekend.days.map(day => `<div class="board-day"><h4><span class="board-day-icon">${day.day_key === 'saturday' ? '☼' : '☾'}</span>${escapeHtml(day.date_label)}</h4><div class="board-slots">${periods.map(([period, title, time]) => {
             const available = people.filter(person => person.slots.some(slot => slot.date === day.date && slot.period === period));
             return `<div class="board-slot"><div class="board-slot-top"><span>${title}<small>${time}</small></span><span class="slot-count">${available.length}</span></div><div class="avatar-row">${available.length ? available.map(person => `<span class="avatar" title="${escapeHtml(person.name)}" aria-label="${escapeHtml(person.name)}">${escapeHtml(person.name.trim().charAt(0).toUpperCase())}</span>`).join('') : '<span class="empty-hint">No one yet</span>'}</div>${renderPlanButton(day, period)}</div>`;
           }).join('')}</div></div>`).join('')}</section>`).join('');
-          roster.innerHTML = people.length ? people.map(person => `<article class="roster-card" role="button" tabindex="0" aria-label="Edit ${escapeHtml(person.name)} availability" data-name="${escapeHtml(person.name)}" data-slots="${escapeHtml(JSON.stringify(person.slots))}"><span class="roster-avatar">${escapeHtml(person.name.trim().charAt(0).toUpperCase())}</span><div class="roster-info"><h3>${escapeHtml(person.name)}</h3><p>${person.slots.length} time${person.slots.length === 1 ? '' : 's'} available</p></div><div class="roster-tags">${person.slots.map(slot => `<span>${escapeHtml(slotNames[`${slot.date}|${slot.period}`] || `${slot.date} ${slot.period}`)}</span>`).join('')}</div><span class="edit-adventurer-button" aria-hidden="true">Edit</span></article>`).join('') : '<div class="empty-roster"><span aria-hidden="true">✧</span><p>The table is waiting for its first adventurer.</p><small>Be the first to add your availability above.</small></div>';
+          roster.innerHTML = people.length ? people.map(person => `<article class="roster-card" data-name="${escapeHtml(person.name)}" data-slots="${escapeHtml(JSON.stringify(person.slots))}"><span class="roster-avatar">${escapeHtml(person.name.trim().charAt(0).toUpperCase())}</span><div class="roster-info"><h3>${escapeHtml(person.name)}</h3><p>${person.slots.length} time${person.slots.length === 1 ? '' : 's'} available</p></div><div class="roster-tags">${person.slots.map(slot => `<span>${escapeHtml(slotNames[`${slot.date}|${slot.period}`] || `${slot.date} ${slot.period}`)}</span>`).join('')}</div><div class="roster-actions"><button class="edit-adventurer-button" type="button" aria-label="Edit ${escapeHtml(person.name)} availability">Edit</button><form action="{{ url_for('ready') }}" method="post" onsubmit="return confirm('Clear this adventurer’s availability?')"><input type="hidden" name="name" value="${escapeHtml(person.name)}"><button class="clear-adventurer-button" type="submit">Clear</button></form><form action="{{ url_for('delete_party_member') }}" method="post" onsubmit="return confirm('Permanently delete this party member and all their availability?')"><input type="hidden" name="name" value="${escapeHtml(person.name)}"><button class="delete-adventurer-button" type="submit">Delete Party Member</button></form></div></article>`).join('') : '<div class="empty-roster"><span aria-hidden="true">✧</span><p>The table is waiting for its first adventurer.</p><small>Be the first to add your availability above.</small></div>';
         } catch (_error) {
           // Keep the last successful board visible if the server is briefly unavailable.
         }
       }
+      const compactLayout = window.matchMedia('(max-width: 760px)');
+      document.querySelectorAll('.responsive-panel').forEach(panel => {
+        panel.open = !compactLayout.matches;
+      });
       window.setInterval(refreshBoard, 15000);
     })();
   </script>
