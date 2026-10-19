@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17100f">
+  <title>Quest Weekend — Dragon's Den Party Board</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="{{ url_for('index') }}" aria-label="Quest Weekend home">
+        <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+          <path d="M10 38c7-2 12-7 15-15l3-10 7 9c7-3 16-2 22 3l8-5-2 12 5 9-10 2c-3 9-12 15-23 14l-8-1-9 8 2-11c-6-3-9-8-10-15Z" />
+          <path d="m28 14-2-9 11 9m8 3 7-10 1 14M43 34l7 1m-26 9-6 8" />
+          <circle cx="45" cy="29" r="2" />
+        </svg>
+        <span>QUEST<span class="brand-light">WEEKEND</span></span>
+      </a>
+      <span class="campaign-tag"><span class="live-dot"></span> THE DRAGON'S DEN</span>
+    </header>
+
+    <main>
+      <section class="session-reminder{% if confirmed_session %} session-confirmed{% endif %}" id="session-reminder" aria-live="polite">
+        <span class="reminder-icon" id="reminder-icon" aria-hidden="true">{% if confirmed_session %}✓{% else %}✦{% endif %}</span>
+        <div class="reminder-copy">
+          <p class="section-kicker">THE NEXT QUEST</p>
+          <h2 id="reminder-title">{% if confirmed_session %}Session planned{% else %}Awaiting the Dungeon Master{% endif %}</h2>
+          <p id="reminder-detail">{% if confirmed_session %}{{ slot_names.get(confirmed_session.date ~ '|' ~ confirmed_session.period, confirmed_session.date ~ ' · ' ~ confirmed_session.period) }}{% else %}The confirmed date and time will appear here for the whole party.{% endif %}</p>
+        </div>
+        <form class="reminder-clear-form{% if not confirmed_session %} is-hidden{% endif %}" id="reminder-clear-form" action="{{ url_for('clear_confirmed_session') }}" method="post" onsubmit="return confirm('Clear the planned session?')">
+          <button class="quiet-button" type="submit">Clear session</button>
+        </form>
+      </section>
+
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="eyebrow-line"></span> THE NEXT SESSION STARTS HERE</p>
+          <h1>When can the<br><span>party assemble?</span></h1>
+          <p class="intro">Mark the weekend moments that work for you. We’ll find the time when the most adventurers are free.</p>
+          <div class="hero-note"><span aria-hidden="true">◷</span> Upcoming weekends · Through the next two months</div>
+        </div>
+        <div class="hero-art" aria-hidden="true">
+          <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+          <div class="sun-glyph">✳</div>
+
+          <img class="party-image" src="{{ url_for('party_image', filename='Party.png') }}" alt="" aria-hidden="true">
+          <!--svg class="dragon-sigil" viewBox="0 0 180 180" role="img" aria-label="A curled dragon emblem">
+            <path class="dragon-wing" d="M85 97C67 75 48 57 24 49c9 18 9 29-3 40 20-1 32 8 39 25m35-18c16-24 34-39 60-45-8 17-7 29 6 39-21 0-32 10-38 27" />
+            <path class="dragon-body" d="M55 115c-13 1-25 10-27 22-2 13 10 22 22 18-8-3-11-11-6-17 5-7 16-7 27-1l17 10c13 8 29 5 38-7l16 4-8-13 14-10-19-2c-3-15-16-27-34-29-15-2-29 5-40 16Z" />
+            <path class="dragon-head" d="M70 91c-3-15 2-28 14-38l-4-17 20 13c14-3 27 1 36 12l18-1-9 15c7 9 9 20 5 31l15 10-23 3c-8 13-23 19-39 16-15-3-26-14-30-29Z" />
+            <path class="dragon-detail" d="m83 55-9-20 21 13m14 9 11-19 1 23m5 13 13 1m-41 38 10 8 9-6" />
+            <circle class="dragon-eye" cx="125" cy="75" r="3" />
+            <path class="dragon-detail" d="m143 90 13 1m-71 27-7 15" />
+          </svg-->
+          <span class="spark spark-a">✦</span><span class="spark spark-b">✧</span><span class="spark spark-c">·</span>
+          <!--span class="art-label">YOUR NEXT<br>ADVENTURE AWAITS</span-->
+        </div>
+      </section>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash-stack" aria-live="polite">
+            {% for category, message in messages %}
+              <p class="flash flash-{{ category }}">{{ message }}</p>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      <section class="content-grid">
+        <section class="panel signup-panel" aria-labelledby="availability-title">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">YOUR TURN</p>
+              <h2 id="availability-title">Set your availability</h2>
+            </div>
+            <span class="step-badge">01 <span>/ 01</span></span>
+          </div>
+          <form action="{{ url_for('ready') }}" method="post">
+            <label class="field-label" for="name">Adventurer name</label>
+            <input class="name-input" type="text" id="name" name="name" list="saved-names" maxlength="60" placeholder="Choose a saved name or enter a new one" autocomplete="name" aria-describedby="name-hint" required>
+            <datalist id="saved-names">
+              {% for saved_name in participants|map(attribute='name')|unique %}
+                <option value="{{ saved_name }}"></option>
+              {% endfor %}
+            </datalist>
+            <p class="name-hint" id="name-hint">Previously saved adventurers appear as suggestions while you type.</p>
+            <fieldset class="availability-fieldset">
+              <legend class="field-label">Choose every date and time that works</legend>
+              <div class="weekend-picker-list">
+                {% for weekend in weekends %}
+                  <section class="weekend-pick">
+                    <h3>Weekend of {{ weekend.days[0].date_label.split(', ', 1)[1] }}</h3>
+                    {% for day in weekend.days %}
+                      <div class="date-row">
+                        <div class="day-label"><span class="day-icon" aria-hidden="true">{% if day.day_key == 'saturday' %}☼{% else %}☾{% endif %}</span><span>{{ day.date_label }}</span></div>
+                        <div class="slot-list">
+                          {% for period, period_title, period_time in times %}
+                            <label class="slot-option">
+                              <input type="checkbox" name="availability" value="{{ day.date }}|{{ period }}">
+                              <span class="slot-check" aria-hidden="true">✓</span>
+                              <span class="slot-copy"><span>{{ period_title }}</span><small>{{ period_time }}</small></span>
+                            </label>
+                          {% endfor %}
+                        </div>
+                      </div>
+                    {% endfor %}
+                  </section>
+                {% endfor %}
+              </div>
+            </fieldset>
+            <button class="ready-button" id="save-availability-button" type="submit"><span id="save-availability-label">Mark me ready</span><span class="button-arrow" aria-hidden="true">↗</span></button>
+            <p class="form-footnote"><span aria-hidden="true">⌁</span> You can submit again anytime to update your choices.</p>
+          </form>
+        </section>
+
+        <section class="panel board-panel" aria-labelledby="board-title">
+          <div class="panel-heading board-heading">
+            <div>
+              <p class="section-kicker">THE PARTY BOARD</p>
+              <h2 id="board-title">Availability</h2>
+            </div>
+            <span class="member-count"><span id="member-count">{{ total_participants }}</span> <span id="member-label">{% if total_participants == 1 %}HERO{% else %}HEROES{% endif %}</span></span>
+          </div>
+          <p class="board-subtitle">A shared look at when everyone’s free. DM tools: confirm a slot or reset the board.</p>
+          <div class="availability-board" id="availability-board" aria-live="polite">
+            {% for weekend in weekends %}
+              <section class="weekend-board">
+                <h3 class="weekend-board-title">Weekend of {{ weekend.days[0].date_label.split(', ', 1)[1] }}</h3>
+                {% for day in weekend.days %}
+                  <div class="board-day">
+                    <h4><span class="board-day-icon">{% if day.day_key == 'saturday' %}☼{% else %}☾{% endif %}</span>{{ day.date_label }}</h4>
+                    <div class="board-slots">
+                      {% for period, period_title, period_time in times %}
+                        {% set slot = day.date ~ '|' ~ period %}
+                        <div class="board-slot">
+                          <div class="board-slot-top"><span>{{ period_title }}<small>{{ period_time }}</small></span><span class="slot-count">{{ totals[slot] }}</span></div>
+                          <div class="avatar-row">
+                            {% for participant in participants if {'date': day.date, 'period': period} in participant.slots %}
+                              <span class="avatar" title="{{ participant.name }}" aria-label="{{ participant.name }}">{{ participant.name[:1]|upper }}</span>
+                            {% else %}
+                              <span class="empty-hint">No one yet</span>
+                            {% endfor %}
+                          </div>
+                          <form class="plan-form" action="{{ url_for('confirm_session') }}" method="post" onsubmit="return confirm('Confirm this slot as the next planned session?')">
+                            <input type="hidden" name="session_date" value="{{ day.date }}">
+                            <input type="hidden" name="period" value="{{ period }}">
+                            <button class="plan-button{% if confirmed_session and confirmed_session.date == day.date and confirmed_session.period == period %} is-planned{% endif %}" type="submit" aria-pressed="{{ 'true' if confirmed_session and confirmed_session.date == day.date and confirmed_session.period == period else 'false' }}">
+                              {% if confirmed_session and confirmed_session.date == day.date and confirmed_session.period == period %}<span aria-hidden="true">✓</span> Planned{% else %}Plan session{% endif %}
+                            </button>
+                          </form>
+                        </div>
+                      {% endfor %}
+                    </div>
+                  </div>
+                {% endfor %}
+              </section>
+            {% endfor %}
+          </div>
+          <div class="legend"><span class="legend-dot"></span> Available for this time</div>
+          <div class="board-footer"><span class="sync-icon" aria-hidden="true">↻</span> Updates automatically as adventurers join</div>
+          <form class="reset-form" action="{{ url_for('reset_availability') }}" method="post" onsubmit="return confirm('Clear every adventurer’s availability selection? Saved names will remain.')">
+            <button class="quiet-button" type="submit">Reset all availability</button>
+          </form>
+        </section>
+      </section>
+
+      <section class="roster-section" aria-labelledby="roster-title">
+        <div class="roster-heading">
+          <div><p class="section-kicker">ROLL CALL</p><h2 id="roster-title">The adventurers <span class="roster-count" id="roster-count">{{ total_participants }}</span></h2></div>
+          <span class="roster-caption">YOUR PARTY, SO FAR</span>
+        </div>
+        <div class="roster-grid" id="roster-grid">
+          {% for participant in participants %}
+            <article class="roster-card" role="button" tabindex="0" aria-label="Edit {{ participant.name }} availability" data-name="{{ participant.name }}" data-slots="{{ participant.slots|tojson|forceescape }}">
+              <span class="roster-avatar">{{ participant.name[:1]|upper }}</span>
+              <div class="roster-info"><h3>{{ participant.name }}</h3><p>{{ participant.slots|length }} time{% if participant.slots|length != 1 %}s{% endif %} available</p></div>
+              <div class="roster-tags">
+                {% for slot in participant.slots %}<span>{{ slot_names[slot.date ~ '|' ~ slot.period] }}</span>{% endfor %}
+              </div>
+              <span class="edit-adventurer-button" aria-hidden="true">Edit</span>
+            </article>
+          {% else %}
+            <div class="empty-roster" id="empty-roster"><span aria-hidden="true">✧</span><p>The table is waiting for its first adventurer.</p><small>Be the first to add your availability above.</small></div>
+          {% endfor %}
+        </div>
+      </section>
+    </main>
+
+    <footer><span>QUEST WEEKEND</span><span>May your schedules align.</span><span class="footer-spark">✦</span></footer>
+  </div>
+  <script>
+    (() => {
+      const slotNames = {{ slot_names|tojson }};
+      const board = document.getElementById('availability-board');
+      const roster = document.getElementById('roster-grid');
+      const count = document.getElementById('member-count');
+      const rosterCount = document.getElementById('roster-count');
+      const label = document.getElementById('member-label');
+      const savedNames = document.getElementById('saved-names');
+      const nameInput = document.getElementById('name');
+      const saveLabel = document.getElementById('save-availability-label');
+      const reminder = document.getElementById('session-reminder');
+      const reminderIcon = document.getElementById('reminder-icon');
+      const reminderTitle = document.getElementById('reminder-title');
+      const reminderDetail = document.getElementById('reminder-detail');
+      const reminderClearForm = document.getElementById('reminder-clear-form');
+      const weekends = {{ weekends|tojson }};
+      const periods = {{ times|tojson }};
+      let confirmedSession = {{ confirmed_session|tojson }};
+      const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+
+      function updateReminder(session) {
+        confirmedSession = session;
+        const isConfirmed = Boolean(session);
+        reminder.classList.toggle('session-confirmed', isConfirmed);
+        reminderIcon.textContent = isConfirmed ? '✓' : '✦';
+        reminderTitle.textContent = isConfirmed ? 'Session planned' : 'Awaiting the Dungeon Master';
+        reminderDetail.textContent = isConfirmed ? (slotNames[`${session.date}|${session.period}`] || `${session.date} · ${session.period}`) : 'The confirmed date and time will appear here for the whole party.';
+        reminderClearForm.classList.toggle('is-hidden', !isConfirmed);
+      }
+
+      function renderPlanButton(day, period) {
+        const selected = confirmedSession && confirmedSession.date === day.date && confirmedSession.period === period;
+        return `<form class="plan-form" action="{{ url_for('confirm_session') }}" method="post"><input type="hidden" name="session_date" value="${escapeHtml(day.date)}"><input type="hidden" name="period" value="${escapeHtml(period)}"><button class="plan-button${selected ? ' is-planned' : ''}" type="submit" aria-pressed="${selected ? 'true' : 'false'}">${selected ? '<span aria-hidden="true">✓</span> Planned' : 'Plan session'}</button></form>`;
+      }
+
+      function editAdventurer(card) {
+        const slots = JSON.parse(card.dataset.slots || '[]');
+        const selected = new Set(slots.map(slot => `${slot.date}|${slot.period}`));
+        nameInput.value = card.dataset.name;
+        document.querySelectorAll('input[name="availability"]').forEach(input => {
+          input.checked = selected.has(input.value);
+        });
+        saveLabel.textContent = 'Save availability';
+        nameInput.focus();
+        document.querySelector('.signup-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      roster.addEventListener('click', event => {
+        const card = event.target.closest('.roster-card[data-name]');
+        if (card) editAdventurer(card);
+      });
+      roster.addEventListener('keydown', event => {
+        const card = event.target.closest('.roster-card[data-name]');
+        if (card && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          editAdventurer(card);
+        }
+      });
+
+      async function refreshBoard() {
+        try {
+          const response = await fetch('{{ url_for("availability_api") }}', { headers: { Accept: 'application/json' } });
+          if (!response.ok) return;
+          const data = await response.json();
+          const people = data.participants;
+          updateReminder(data.confirmed_session);
+          count.textContent = people.length;
+          rosterCount.textContent = people.length;
+          label.textContent = people.length === 1 ? 'HERO' : 'HEROES';
+          savedNames.innerHTML = [...new Set(people.map(person => person.name))].map(name => `<option value="${escapeHtml(name)}"></option>`).join('');
+          board.innerHTML = weekends.map(weekend => `<section class="weekend-board"><h3 class="weekend-board-title">Weekend of ${escapeHtml(weekend.days[0].date_label.split(', ').slice(1).join(', '))}</h3>${weekend.days.map(day => `<div class="board-day"><h4><span class="board-day-icon">${day.day_key === 'saturday' ? '☼' : '☾'}</span>${escapeHtml(day.date_label)}</h4><div class="board-slots">${periods.map(([period, title, time]) => {
+            const available = people.filter(person => person.slots.some(slot => slot.date === day.date && slot.period === period));
+            return `<div class="board-slot"><div class="board-slot-top"><span>${title}<small>${time}</small></span><span class="slot-count">${available.length}</span></div><div class="avatar-row">${available.length ? available.map(person => `<span class="avatar" title="${escapeHtml(person.name)}" aria-label="${escapeHtml(person.name)}">${escapeHtml(person.name.trim().charAt(0).toUpperCase())}</span>`).join('') : '<span class="empty-hint">No one yet</span>'}</div>${renderPlanButton(day, period)}</div>`;
+          }).join('')}</div></div>`).join('')}</section>`).join('');
+          roster.innerHTML = people.length ? people.map(person => `<article class="roster-card" role="button" tabindex="0" aria-label="Edit ${escapeHtml(person.name)} availability" data-name="${escapeHtml(person.name)}" data-slots="${escapeHtml(JSON.stringify(person.slots))}"><span class="roster-avatar">${escapeHtml(person.name.trim().charAt(0).toUpperCase())}</span><div class="roster-info"><h3>${escapeHtml(person.name)}</h3><p>${person.slots.length} time${person.slots.length === 1 ? '' : 's'} available</p></div><div class="roster-tags">${person.slots.map(slot => `<span>${escapeHtml(slotNames[`${slot.date}|${slot.period}`] || `${slot.date} ${slot.period}`)}</span>`).join('')}</div><span class="edit-adventurer-button" aria-hidden="true">Edit</span></article>`).join('') : '<div class="empty-roster"><span aria-hidden="true">✧</span><p>The table is waiting for its first adventurer.</p><small>Be the first to add your availability above.</small></div>';
+        } catch (_error) {
+          // Keep the last successful board visible if the server is briefly unavailable.
+        }
+      }
+      window.setInterval(refreshBoard, 15000);
+    })();
+  </script>
+</body>
+</html>
